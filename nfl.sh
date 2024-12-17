@@ -17,8 +17,8 @@ while :; do
 
   # Parse video titles and IDs, filter by both queries only if title exists
   echo "$RESPONSE" | \
-    jq -r --arg query1 "$QUERY1" --arg query2 "$QUERY2" \
-    '.items[] | select(.snippet.title? and (.snippet.title | test($query1; "i")) and (.snippet.title | test($query2; "i"))) | "\(.snippet.title) - https://www.youtube.com/watch?v=\(.snippet.resourceId.videoId)"' | \
+    jq -r --arg query1 "$QUERY" \
+    '.items[] | select(.snippet.title? and (.snippet.title | test($query1; "i"))) | "\(.snippet.title) - https://www.youtube.com/watch?v=\(.snippet.resourceId.videoId)"' | \
   while IFS= read -r LINE; do
     TITLE=$(echo "$LINE" | awk -F' - ' '{print $1}')
     URL=$(echo "$LINE" | awk -F' - ' '{print $2}')
