@@ -25,7 +25,7 @@ while :; do
 
     # Download the video in MP4 format using yt-dlp
     echo "Downloading: $TITLE"
-    yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]" "$URL"
+    yt-dlp_macos -S "res,fps,br" -f "bv*+ba/b" --merge-output-format mkv "$URL"
   done
 
   # Increment page count and stop after 10 pages
