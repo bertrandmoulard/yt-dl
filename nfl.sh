@@ -2,6 +2,9 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/config.sh"
 
+# Keep yt-dlp current so YouTube extractor changes don't break downloads
+yt-dlp_macos -U
+
 PAGE_COUNT=0
 PAGE_TOKEN=""
 
