@@ -53,8 +53,18 @@ touch "$ARCHIVE"
   find "$LIBRARY_ROOT" -type f | grep -o '\[[A-Za-z0-9_-]\{11\}\]\.[a-z0-9]*$' | cut -c2-12 | sed 's/^/youtube /'
 } | sort -u > "$ARCHIVE.new" && mv "$ARCHIVE.new" "$ARCHIVE"
 
-# Keep yt-dlp current so YouTube extractor changes don't break downloads
-yt-dlp -U
+IMPORTED=()
+FAILED=()
+
+# Keep yt-dlp and deno (the JavaScript runtime yt-dlp needs for YouTube)
+# current, so YouTube changes don't break downloads. Both binaries must be
+# owned by this user, or they can't replace themselves
+if ! yt-dlp -U; then
+  FAILED+=("yt-dlp couldn't update itself")
+fi
+if ! NO_COLOR=1 deno upgrade; then
+  FAILED+=("deno couldn't update itself")
+fi
 
 # Library folder for a video. Playoff rounds are numbered on from the regular
 # season, e.g. "2026 - Week 19 Wild Card Round". The round or week comes from
@@ -110,8 +120,6 @@ fi
 
 PAGE_COUNT=0
 PAGE_TOKEN=""
-IMPORTED=()
-FAILED=()
 
 while :; do
   # Fetch videos from the playlist
