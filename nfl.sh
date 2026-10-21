@@ -4,6 +4,29 @@ source "$SCRIPT_DIR/config.sh"
 
 ARCHIVE="$SCRIPT_DIR/archive.txt"
 
+# A season runs September to February, so January to June belong to the
+# previous year's season. config.sh can set these to override them
+TODAY=$(date -u +%F)
+if [ -z "$SEASON" ]; then
+  SEASON=${TODAY:0:4}
+  if [ "$((10#${TODAY:5:2}))" -le 6 ]; then
+    SEASON=$((SEASON - 1))
+  fi
+fi
+
+# Week 1 opens on the Thursday after Labor Day (the first Monday in
+# September), so weeks start on the Wednesday two days after it
+if [ -z "$SEASON_START" ]; then
+  for DAY in 1 2 3 4 5 6 7; do
+    if [ "$(date -ud "$SEASON-09-0$DAY" +%u)" -eq 1 ]; then
+      SEASON_START=$(date -ud "$SEASON-09-0$DAY + 2 days" +%F)
+      break
+    fi
+  done
+fi
+
+LIBRARY_DIR=${LIBRARY_DIR:-"$LIBRARY_ROOT/$SEASON NFL"}
+
 # Both drives are mounted with nofail: if one is missing, its mount point is an
 # empty directory on the SD card, and we'd silently fill the SD card instead
 for MOUNT in "$TMP_MOUNT" "$LIBRARY_MOUNT"; do
@@ -12,14 +35,14 @@ for MOUNT in "$TMP_MOUNT" "$LIBRARY_MOUNT"; do
     exit 1
   fi
 done
-mkdir -p "$TMP_DIR" "$LIBRARY_DIR"
+mkdir -p "$TMP_DIR"
 
 # Record every video already in the library, so files moved or added by hand
 # are never downloaded again, and the archive can be rebuilt if it's lost
 touch "$ARCHIVE"
 {
   cat "$ARCHIVE"
-  find "$LIBRARY_DIR" -type f | grep -o '\[[A-Za-z0-9_-]\{11\}\]\.[a-z0-9]*$' | cut -c2-12 | sed 's/^/youtube /'
+  find "$LIBRARY_ROOT" -type f | grep -o '\[[A-Za-z0-9_-]\{11\}\]\.[a-z0-9]*$' | cut -c2-12 | sed 's/^/youtube /'
 } | sort -u > "$ARCHIVE.new" && mv "$ARCHIVE.new" "$ARCHIVE"
 
 # Keep yt-dlp current so YouTube extractor changes don't break downloads
