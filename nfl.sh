@@ -27,11 +27,19 @@ fi
 
 LIBRARY_DIR=${LIBRARY_DIR:-"$LIBRARY_ROOT/$SEASON NFL"}
 
+# Pushover, through the same helper as the backup and reboot notifications
+notify() {
+  if command -v pushover-notify > /dev/null; then
+    pushover-notify "$@"
+  fi
+}
+
 # Both drives are mounted with nofail: if one is missing, its mount point is an
 # empty directory on the SD card, and we'd silently fill the SD card instead
 for MOUNT in "$TMP_MOUNT" "$LIBRARY_MOUNT"; do
   if ! mountpoint -q "$MOUNT"; then
     echo "$MOUNT is not mounted, aborting" >&2
+    notify -p 1 "NFL highlights FAILED" "$MOUNT is not mounted, nothing was downloaded"
     exit 1
   fi
 done
@@ -102,6 +110,8 @@ fi
 
 PAGE_COUNT=0
 PAGE_TOKEN=""
+IMPORTED=()
+FAILED=()
 
 while :; do
   # Fetch videos from the playlist
@@ -113,10 +123,15 @@ while :; do
     -d "pageToken=$PAGE_TOKEN" \
     "$BASE_URL")
 
-  # Parse video IDs, publish dates and titles, filtered by the query
-  echo "$RESPONSE" | \
-    jq -r --arg query1 "$QUERY" \
-    '.items[] | select(.snippet.title? and (.snippet.title | test($query1; "i"))) | [.contentDetails.videoId, .contentDetails.videoPublishedAt, .snippet.title] | @tsv' | \
+  # A bad key or used-up quota would otherwise look like a quiet day
+  if ! echo "$RESPONSE" | jq -e '.items' > /dev/null 2>&1; then
+    ERROR=$(echo "$RESPONSE" | jq -r '.error.message // empty' 2>/dev/null)
+    FAILED+=("YouTube API: ${ERROR:-no valid response}")
+    break
+  fi
+
+  # Parse video IDs, publish dates and titles, filtered by the query. The loop
+  # reads from process substitution, not a pipe, so IMPORTED and FAILED survive
   while IFS=$'\t' read -r ID PUBLISHED TITLE; do
     if grep -qx "youtube $ID" "$ARCHIVE"; then
       continue
@@ -130,13 +145,23 @@ while :; do
     # Fragments and merging happen on the scratch drive; only the finished
     # file is written to the library. stdin is closed so ffmpeg can't eat the
     # rest of the video list
+    # e.g. "Week 06: Buffalo Bills vs. Las Vegas Raiders"
+    LABEL="${WEEK_DIR#"$SEASON - "}"
+    LABEL="${LABEL% Highlights}: ${TITLE%% Game Highlights*}"
+
     echo "Downloading: $TITLE -> $WEEK_DIR"
-    yt-dlp -S "res,fps,br" -f "bv*+ba/b" --merge-output-format mkv "${PROGRESS[@]}" \
+    if yt-dlp -S "res,fps,br" -f "bv*+ba/b" --merge-output-format mkv "${PROGRESS[@]}" \
       --download-archive "$ARCHIVE" \
       -P "temp:$TMP_DIR" -P "home:$LIBRARY_DIR" \
       -o "$WEEK_DIR/%(title)s [%(id)s].%(ext)s" \
-      "https://www.youtube.com/watch?v=$ID" < /dev/null
-  done
+      "https://www.youtube.com/watch?v=$ID" < /dev/null; then
+      IMPORTED+=("$LABEL")
+    else
+      FAILED+=("$LABEL")
+    fi
+  done < <(echo "$RESPONSE" | \
+    jq -r --arg query1 "$QUERY" \
+    '.items[] | select(.snippet.title? and (.snippet.title | test($query1; "i"))) | [.contentDetails.videoId, .contentDetails.videoPublishedAt, .snippet.title] | @tsv')
 
   # Increment page count and stop after MAX_PAGES pages
   ((PAGE_COUNT++))
@@ -150,3 +175,14 @@ while :; do
     break
   fi
 done
+
+# Pushover messages are capped at 1024 characters
+if [ ${#IMPORTED[@]} -gt 0 ]; then
+  MESSAGE=$(printf '%s\n' "${IMPORTED[@]}")
+  notify "NFL: ${#IMPORTED[@]} new game(s) in the library" "${MESSAGE:0:1024}"
+fi
+if [ ${#FAILED[@]} -gt 0 ]; then
+  MESSAGE=$(printf '%s\n' "${FAILED[@]}")
+  notify -p 1 "NFL highlights: ${#FAILED[@]} failure(s)" "${MESSAGE:0:1024} (log in $SCRIPT_DIR/logs)"
+  exit 1
+fi
