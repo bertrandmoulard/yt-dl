@@ -22,3 +22,7 @@ LIBRARY_ROOT=/mnt/bococa/media_library/Sports
 # Scratch space for in-progress downloads, and the drive it lives on
 TMP_MOUNT=/mnt/downloads
 TMP_DIR=/mnt/downloads/yt-dl/tmp
+
+# Emby, told to scan new files right after an import (optional)
+EMBY_URL=http://127.0.0.1:8096/emby
+EMBY_API_KEY=

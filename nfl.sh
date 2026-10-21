@@ -54,6 +54,7 @@ touch "$ARCHIVE"
 } | sort -u > "$ARCHIVE.new" && mv "$ARCHIVE.new" "$ARCHIVE"
 
 IMPORTED=()
+NEW_DIRS=()
 FAILED=()
 
 # Keep yt-dlp and deno (the JavaScript runtime yt-dlp needs for YouTube)
@@ -180,6 +181,7 @@ while :; do
       -o "$WEEK_DIR/%(title)s [%(id)s].%(ext)s" \
       "https://www.youtube.com/watch?v=$ID" < /dev/null; then
       IMPORTED+=("$LABEL")
+      NEW_DIRS+=("$LIBRARY_DIR/$WEEK_DIR")
       count_regular_weeks
     else
       FAILED+=("$LABEL")
@@ -232,6 +234,16 @@ check_quiet() {
   fi
 }
 check_quiet
+
+# Have Emby scan the new games now rather than at its next scheduled scan.
+# Not worth an alert if it fails: they still show up at that scan
+if [ ${#NEW_DIRS[@]} -gt 0 ] && [ -n "$EMBY_API_KEY" ]; then
+  UPDATES=$(printf '%s\n' "${NEW_DIRS[@]}" | sort -u | jq -R '{Path: ., UpdateType: "Created"}' | jq -s '{Updates: .}')
+  if ! curl -sf --max-time 30 -X POST -H "X-Emby-Token: $EMBY_API_KEY" \
+      -H "Content-Type: application/json" -d "$UPDATES" "$EMBY_URL/Library/Media/Updated" > /dev/null; then
+    echo "Couldn't tell Emby about the new games" >&2
+  fi
+fi
 
 # Pushover messages are capped at 1024 characters
 if [ ${#IMPORTED[@]} -gt 0 ]; then
