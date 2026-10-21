@@ -66,11 +66,25 @@ if ! NO_COLOR=1 deno upgrade; then
   FAILED+=("deno couldn't update itself")
 fi
 
-# Library folder for a video. Playoff rounds are numbered on from the regular
-# season, e.g. "2026 - Week 19 Wild Card Round". The round or week comes from
-# the title, or else from the publish date, counting Wednesday-to-Tuesday weeks
-# from SEASON_START (the Wednesday before week 1). Prints nothing for
-# preseason games, which shouldn't be downloaded
+# The regular season is 18 weeks, unless this season's library already has a
+# later regular week (an 18-game season would have 19). Playoff rounds are
+# numbered on from it
+count_regular_weeks() {
+  REGULAR_WEEKS=${MIN_REGULAR_WEEKS:-18}
+  local DIR
+  for DIR in "$LIBRARY_DIR/$SEASON - Week "*" Highlights"; do
+    if [[ "$DIR" =~ Week\ ([0-9]+)\ Highlights$ ]] && (( 10#${BASH_REMATCH[1]} > REGULAR_WEEKS )); then
+      REGULAR_WEEKS=$((10#${BASH_REMATCH[1]}))
+    fi
+  done
+}
+
+# Library folder for a video, e.g. "2026 - Week 06 Highlights" or
+# "2026 - Week 19 Wild Card Round". The round or week comes from the title, or
+# else from the publish date, counting Wednesday-to-Tuesday weeks from
+# SEASON_START (the Wednesday before week 1). A "Week N" title is always a
+# regular season week, which is how a longer season is first noticed. Prints
+# nothing for preseason games, which shouldn't be downloaded
 folder_for() {
   local TITLE="$1" PUBLISHED="$2" WEEK
   local WILD_CARD=$((REGULAR_WEEKS + 1))
@@ -87,7 +101,8 @@ folder_for() {
   elif [[ "$TITLE" =~ Super\ Bowl ]]; then
     WEEK=$SUPER_BOWL
   elif [[ "$TITLE" =~ [Ww]eek\ ([0-9]+) ]]; then
-    WEEK=$((10#${BASH_REMATCH[1]}))
+    printf "%s - Week %02d Highlights" "$SEASON" "$((10#${BASH_REMATCH[1]}))"
+    return
   else
     local START NOW
     START=$(date -ud "$SEASON_START" +%s)
@@ -118,6 +133,7 @@ if [ ! -t 1 ]; then
   PROGRESS=(--no-progress)
 fi
 
+count_regular_weeks
 PAGE_COUNT=0
 PAGE_TOKEN=""
 
@@ -164,6 +180,7 @@ while :; do
       -o "$WEEK_DIR/%(title)s [%(id)s].%(ext)s" \
       "https://www.youtube.com/watch?v=$ID" < /dev/null; then
       IMPORTED+=("$LABEL")
+      count_regular_weeks
     else
       FAILED+=("$LABEL")
     fi

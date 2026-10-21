@@ -6,8 +6,9 @@ BASE_URL=
 QUERY=
 MAX_PAGES=10
 
-# Regular season weeks before the playoffs
-REGULAR_WEEKS=18
+# Regular season weeks before the playoffs, at least. More are picked up from
+# the library, e.g. a "Week 19 Highlights" folder in an 18-game season
+#MIN_REGULAR_WEEKS=18
 
 # The season (e.g. 2026) and the Wednesday before week 1 are worked out from
 # today's date; set them here only to override that
