@@ -201,6 +201,38 @@ while :; do
   fi
 done
 
+# Alert once if games stop arriving mid-season, e.g. because the titles changed
+# and nothing matches QUERY any more. Games arrive at least every 6 days,
+# except for the two weeks between the Championship round and the Super Bowl
+check_quiet() {
+  local NOW=${1:-$(date +%s)} FLAG="$SCRIPT_DIR/.quiet-alerted"
+  local LAST NEWEST MAX_DAYS=8 DAYS
+
+  if compgen -G "$LIBRARY_DIR/$SEASON - Week * Super Bowl/*" > /dev/null; then
+    rm -f "$FLAG"
+    return
+  elif compgen -G "$LIBRARY_DIR/$SEASON - Week * Championship Round/*" > /dev/null; then
+    MAX_DAYS=15
+  fi
+
+  # Counted from the opening Thursday until the season's first game arrives
+  LAST=$(date -ud "$SEASON_START + 1 day" +%s)
+  NEWEST=$(find "$LIBRARY_DIR/$SEASON - Week "* -type f -printf '%T@\n' 2>/dev/null | sort -n | tail -1)
+  NEWEST=${NEWEST%.*}
+  if [ -n "$NEWEST" ] && [ "$NEWEST" -gt "$LAST" ]; then
+    LAST=$NEWEST
+  fi
+
+  DAYS=$(( (NOW - LAST) / 86400 ))
+  if [ "$DAYS" -le "$MAX_DAYS" ]; then
+    rm -f "$FLAG"
+  elif [ ! -e "$FLAG" ]; then
+    notify -p 1 "NFL highlights: no new games for $DAYS days" "Nothing has matched \"$QUERY\" in the playlist since $(date -d "@$LAST" '+%a %-d %b'). The video titles may have changed."
+    touch "$FLAG"
+  fi
+}
+check_quiet
+
 # Pushover messages are capped at 1024 characters
 if [ ${#IMPORTED[@]} -gt 0 ]; then
   MESSAGE=$(printf '%s\n' "${IMPORTED[@]}")

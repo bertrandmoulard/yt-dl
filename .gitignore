@@ -2,3 +2,4 @@ config.sh
 .DS_Store
 archive.txt
 logs/
+.quiet-alerted
