@@ -94,6 +94,12 @@ folder_for() {
   printf "%s - Week %02d %s" "$SEASON" "$WEEK" "$NAME"
 }
 
+# Progress bars only make sense in a terminal; under cron they flood the log
+PROGRESS=()
+if [ ! -t 1 ]; then
+  PROGRESS=(--no-progress)
+fi
+
 PAGE_COUNT=0
 PAGE_TOKEN=""
 
@@ -125,7 +131,7 @@ while :; do
     # file is written to the library. stdin is closed so ffmpeg can't eat the
     # rest of the video list
     echo "Downloading: $TITLE -> $WEEK_DIR"
-    yt-dlp -S "res,fps,br" -f "bv*+ba/b" --merge-output-format mkv \
+    yt-dlp -S "res,fps,br" -f "bv*+ba/b" --merge-output-format mkv "${PROGRESS[@]}" \
       --download-archive "$ARCHIVE" \
       -P "temp:$TMP_DIR" -P "home:$LIBRARY_DIR" \
       -o "$WEEK_DIR/%(title)s [%(id)s].%(ext)s" \
