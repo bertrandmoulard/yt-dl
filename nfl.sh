@@ -25,18 +25,50 @@ touch "$ARCHIVE"
 # Keep yt-dlp current so YouTube extractor changes don't break downloads
 yt-dlp -U
 
-# Week number from the title, or else from the publish date, counting
-# Wednesday-to-Tuesday weeks from SEASON_START (the Wednesday before week 1)
-week_for() {
-  local TITLE="$1" PUBLISHED="$2"
-  if [[ "$TITLE" =~ [Ww]eek\ ([0-9]+) ]]; then
-    echo "${BASH_REMATCH[1]}"
+# Library folder for a video. Playoff rounds are numbered on from the regular
+# season, e.g. "2026 - Week 19 Wild Card Round". The round or week comes from
+# the title, or else from the publish date, counting Wednesday-to-Tuesday weeks
+# from SEASON_START (the Wednesday before week 1). Prints nothing for
+# preseason games, which shouldn't be downloaded
+folder_for() {
+  local TITLE="$1" PUBLISHED="$2" WEEK
+  local WILD_CARD=$((REGULAR_WEEKS + 1))
+  local SUPER_BOWL=$((REGULAR_WEEKS + 4))
+
+  if [[ "$TITLE" =~ [Pp]reseason|Hall\ of\ Fame ]]; then
+    return
+  elif [[ "$TITLE" =~ Wild\ Card ]]; then
+    WEEK=$WILD_CARD
+  elif [[ "$TITLE" =~ Divisional ]]; then
+    WEEK=$((WILD_CARD + 1))
+  elif [[ "$TITLE" =~ Championship ]]; then
+    WEEK=$((WILD_CARD + 2))
+  elif [[ "$TITLE" =~ Super\ Bowl ]]; then
+    WEEK=$SUPER_BOWL
+  elif [[ "$TITLE" =~ [Ww]eek\ ([0-9]+) ]]; then
+    WEEK=$((10#${BASH_REMATCH[1]}))
   else
     local START NOW
     START=$(date -ud "$SEASON_START" +%s)
     NOW=$(date -ud "$PUBLISHED" +%s)
-    echo $(( (NOW - START) / 604800 + 1 ))
+    WEEK=$(( (NOW - START) / 604800 + 1 ))
+    # Before week 1 means preseason; the Super Bowl comes after a bye week
+    if [ "$WEEK" -lt 1 ]; then
+      return
+    elif [ "$WEEK" -gt "$SUPER_BOWL" ]; then
+      WEEK=$SUPER_BOWL
+    fi
   fi
+
+  local NAME
+  case $((WEEK - REGULAR_WEEKS)) in
+    1) NAME="Wild Card Round" ;;
+    2) NAME="Divisional Round" ;;
+    3) NAME="Championship Round" ;;
+    4) NAME="Super Bowl" ;;
+    *) NAME="Highlights" ;;
+  esac
+  printf "%s - Week %02d %s" "$SEASON" "$WEEK" "$NAME"
 }
 
 PAGE_COUNT=0
@@ -61,8 +93,10 @@ while :; do
       continue
     fi
 
-    WEEK=$(week_for "$TITLE" "$PUBLISHED")
-    WEEK_DIR=$(printf "%s - Week %02d Highlights" "$SEASON" "$((10#$WEEK))")
+    WEEK_DIR=$(folder_for "$TITLE" "$PUBLISHED")
+    if [ -z "$WEEK_DIR" ]; then
+      continue
+    fi
 
     # Fragments and merging happen on the scratch drive; only the finished
     # file is written to the library. stdin is closed so ffmpeg can't eat the
